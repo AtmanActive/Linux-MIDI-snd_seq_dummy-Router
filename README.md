@@ -19,6 +19,31 @@ but it is bare: a fixed port count chosen at module load, names hardcoded to
 
 ## Install
 
+Grab a build from [Releases](https://github.com/AtmanActive/Linux-MIDI-snd_seq_dummy-Router/releases):
+
+```bash
+sudo apt install ./lmssdr_1.0.0_all.deb        # Debian 13 / Ubuntu, ~200 kB
+```
+
+```bash
+chmod +x lmssdr-1.0.0-x86_64.AppImage          # any other x86_64 Linux
+./lmssdr-1.0.0-x86_64.AppImage
+```
+
+The `.deb` uses the system Qt and wires up icons, the desktop entry and the
+polkit helper for you. The AppImage bundles Python and Qt (~90 MB) and needs
+nothing installed, but cannot install the polkit helper — polkit identifies a
+program by a fixed absolute path, and a mount point that changes every run is
+not one. Extract it and run the bundled installer if you want the port count
+to use KDE's password dialog:
+
+```bash
+./lmssdr-1.0.0-x86_64.AppImage --appimage-extract
+sudo squashfs-root/usr/share/lmssdr/install-polkit.sh
+```
+
+Or from source:
+
 ```bash
 uv venv && uv pip install -e .
 ./packaging/install-icons.sh           # tray icon colours
@@ -36,8 +61,6 @@ when changing the port count, which reloads a kernel module. Without it the
 app still works: `pkexec` falls back to a generic prompt, and failing that
 the app shows you the commands to paste. The helper is the only privileged
 code here — about forty lines of shell that range-check one integer.
-
-Packaging (deb/AppImage) is not built yet.
 
 ## Usage
 
@@ -114,6 +137,20 @@ reboot. Older file names are renamed automatically on first run.
 ## Development
 
     .venv/bin/python -m pytest
+
+### Releasing
+
+Run the **Release** workflow from the Actions tab. It runs the test suite,
+builds all four artifacts and opens a **draft** release — never a published
+one, so you can look at what came out before anyone else can. It takes the
+tag from `lmssdr/__init__.py` unless you type one, and re-running replaces
+its own draft rather than failing.
+
+Each build script also runs on its own:
+
+    packaging/build-deb.sh dist
+    packaging/build-appimage.sh dist       # needs uv
+    python -m build                        # sdist and wheel
 
 `lmssdr/core/` imports no Qt and is usable from a plain script.
 `lmssdr/core/alsaseq.py` is a small ctypes binding to `libasound`; there is

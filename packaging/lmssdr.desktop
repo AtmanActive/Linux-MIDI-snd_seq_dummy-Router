@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=MIDI Router
+GenericName=MIDI Through Port Router
+Comment=Route ALSA MIDI Through ports and mute the microphone on DAW transport
+Exec=lmssdr
+Icon=lmssdr
+Terminal=false
+Categories=AudioVideo;Audio;Midi;Settings;
+Keywords=MIDI;ALSA;snd_seq_dummy;routing;aconnect;mute;
+StartupNotify=false
+SingleMainWindow=true

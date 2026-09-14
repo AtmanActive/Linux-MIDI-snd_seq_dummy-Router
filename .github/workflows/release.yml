@@ -1,0 +1,294 @@
+name: Release
+
+# On demand only. Building a release is a decision, not something that should
+# happen because someone pushed a README fix.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release as. Leave empty to use v<version from lmssdr/__init__.py>.'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the draft as a pre-release'
+        required: false
+        type: boolean
+        default: false
+
+# The draft is always created; it is never published. Publishing stays a
+# human decision made in the GitHub UI after looking at the artifacts.
+permissions:
+  contents: write
+
+env:
+  # Everything Qt needs to start under the offscreen platform plugin. The
+  # test suite never opens a window, but PySide6 still links these.
+  QT_DEPS: libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libasound2t64
+
+jobs:
+
+  # ---------------------------------------------------------------- tests --
+  # Nothing is built until the suite passes. A release that fails its own
+  # tests is worse than no release.
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $QT_DEPS
+
+      - name: Install the package
+        run: uv pip install --system -e '.[dev]'
+
+      - name: Run the test suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+
+      - name: Work out the version and tag
+        id: meta
+        run: |
+          version=$(python -c 'import lmssdr; print(lmssdr.__version__)')
+          tag='${{ inputs.tag }}'
+          [ -n "$tag" ] || tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version as $tag"
+
+  # ------------------------------------------------------- sdist and wheel --
+  python-dist:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build
+        run: |
+          python -m pip install --quiet build
+          python -m build
+
+      - name: Check the artifacts are installable
+        run: |
+          python -m pip install --quiet twine
+          twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  # --------------------------------------------------------------- the deb --
+  deb:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends $QT_DEPS
+
+      # Generated rather than taken from the checkout, so the shipped icons
+      # always match make-icons.py rather than whatever was last committed.
+      - name: Generate icons
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          uv pip install --system 'PySide6-Essentials>=6.6'
+          python packaging/make-icons.py
+
+      - name: Build
+        run: packaging/build-deb.sh dist
+
+      - name: Inspect the package
+        run: |
+          deb=$(ls dist/*.deb)
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" | grep -q 'usr/bin/lmssdr'
+          dpkg-deb --contents "$deb" | grep -q 'lmssdr/ui/Main.qml'
+          dpkg-deb --contents "$deb" | grep -q 'polkit-1/actions'
+          # The payload must import and load its QML with the interpreter the
+          # package declares, using nothing from this checkout.
+          dpkg-deb -x "$deb" /tmp/debroot
+          PYTHONPATH=/tmp/debroot/usr/lib/python3/dist-packages \
+          QT_QPA_PLATFORM=offscreen python - <<'PY'
+          from pathlib import Path
+          import lmssdr
+          from lmssdr.ui import bridge          # noqa: F401  (imports PySide6)
+          ui = Path(lmssdr.__file__).parent / "ui"
+          missing = [n for n in ("Main.qml", "PortsPage.qml", "RoutingPage.qml",
+                                 "MutePage.qml", "SettingsPage.qml")
+                     if not (ui / n).exists()]
+          assert not missing, f"missing from the package: {missing}"
+          print("deb payload OK:", lmssdr.__version__)
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  # ---------------------------------------------------------- the AppImage --
+  # Built on the oldest runner still supported, because an AppImage's
+  # compatibility floor is the glibc it was linked against. Building on
+  # ubuntu-latest would produce an image that refuses to start on the
+  # slightly older distributions the AppImage exists to serve.
+  appimage:
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Qt runtime libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libasound2
+
+      - name: Generate icons
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          uv pip install --system 'PySide6-Essentials>=6.6'
+          python packaging/make-icons.py
+
+      - name: Build
+        run: packaging/build-appimage.sh dist
+
+      - name: Smoke-test the image
+        run: |
+          image=$(ls dist/*.AppImage)
+          "$image" --appimage-extract >/dev/null
+          # The bundled interpreter, not the runner's: this proves the image
+          # carries a working Python, PySide6 and application of its own.
+          QT_QPA_PLATFORM=offscreen \
+          squashfs-root/usr/bin/python3 - <<'PY'
+          from pathlib import Path
+          from PySide6.QtCore import QUrl, QTimer
+          from PySide6.QtQml import QQmlApplicationEngine
+          from PySide6.QtWidgets import QApplication
+          import lmssdr
+          from lmssdr.core.settings import Settings
+          from lmssdr.ui.bridge import Bridge
+
+          app = QApplication([])
+          warnings = []
+          bridge = Bridge(Settings())
+          engine = QQmlApplicationEngine()
+          engine.warnings.connect(
+              lambda ws: warnings.extend(w.toString() for w in ws))
+          engine.rootContext().setContextProperty("bridge", bridge)
+          engine.load(QUrl.fromLocalFile(
+              str(Path(lmssdr.__file__).parent / "ui" / "Main.qml")))
+          assert engine.rootObjects(), "Main.qml did not load in the AppImage"
+          QTimer.singleShot(1500, app.quit)
+          app.exec()
+          assert not warnings, warnings
+          print("AppImage OK:", lmssdr.__version__)
+          PY
+          rm -rf squashfs-root
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  # ----------------------------------------------------------- the release --
+  release:
+    needs: [test, python-dist, deb, appimage]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: artifacts
+        run: |
+          ls -lh
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.test.outputs.tag }}
+          VERSION: ${{ needs.test.outputs.version }}
+        run: |
+          # Re-running this workflow should replace its own draft rather than
+          # failing. Only drafts are touched: a published release is never
+          # deleted by automation.
+          if gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null | grep -qx true; then
+            echo "Replacing the existing draft for $TAG"
+            # --cleanup-tag is tolerated rather than required: a draft has
+            # no tag yet, so there is usually nothing to clean up.
+            gh release delete "$TAG" --yes --cleanup-tag || \
+              gh release delete "$TAG" --yes
+          fi
+
+          cat > notes.md <<EOF
+          ## Install
+
+          **Debian 13 / Ubuntu** — uses the system Qt, about 200 kB:
+
+              sudo apt install ./lmssdr_${VERSION}_all.deb
+
+          **Any other x86_64 Linux** — self-contained, no dependencies:
+
+              chmod +x lmssdr-${VERSION}-x86_64.AppImage
+              ./lmssdr-${VERSION}-x86_64.AppImage
+
+          **From PyPI-style wheel** — needs PySide6:
+
+              pip install lmssdr-${VERSION}-py3-none-any.whl
+
+          The AppImage bundles Python and Qt but cannot install the polkit
+          helper, which needs a fixed absolute path. Extract it
+          (\`--appimage-extract\`) and run
+          \`squashfs-root/usr/share/lmssdr/install-polkit.sh\` as root if you
+          want the port count to use KDE's password dialog.
+
+          Verify downloads against \`SHA256SUMS\`.
+          EOF
+
+          gh release create "$TAG" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file notes.md \
+            ${{ inputs.prerelease && '--prerelease' || '' }} \
+            artifacts/*
+
+          echo "Draft release created. Review and publish it at:"
+          gh release view "$TAG" --json url --jq .url
