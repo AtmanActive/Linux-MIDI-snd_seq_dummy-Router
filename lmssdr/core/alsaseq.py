@@ -248,7 +248,7 @@ class Seq:
     its own -- an empty client cannot be mistaken for something routable.
     """
 
-    def __init__(self, name: str = "MIDI Router", mode: int = OPEN_DUPLEX,
+    def __init__(self, name: str = "LMSSDR MIDI Router", mode: int = OPEN_DUPLEX,
                  nonblock: bool = False):
         self._lib = _load()
         self._bind()

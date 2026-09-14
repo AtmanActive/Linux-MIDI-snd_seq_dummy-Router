@@ -136,7 +136,7 @@ Item {
                 font.pixelSize: t.fs(11)
             }
             FilterField {
-                label: "name, kernel name or remark"
+                label: "alias, name or remark"
                 Layout.fillWidth: true
                 Layout.maximumWidth: page.width * 0.34
                 text: bridge.filterFrom
@@ -150,7 +150,7 @@ Item {
                 leftPadding: t.fs(6)
             }
             FilterField {
-                label: "name, kernel name or remark"
+                label: "alias, name or remark"
                 Layout.fillWidth: true
                 Layout.maximumWidth: page.width * 0.34
                 text: bridge.filterTo
@@ -591,11 +591,23 @@ Item {
 
                                         MouseArea {
                                             anchors.fill: parent
-                                            enabled: !isDiagonal && destNumber >= 0
-                                                     && sourceNumber >= 0
+                                            // Enabled on the diagonal too.
+                                            // Skipping it there left a cell
+                                            // with no hover handling at all,
+                                            // so the crosshair blinked off
+                                            // every time the pointer crossed
+                                            // it. Only the *click* is withheld
+                                            // there; see onClicked.
+                                            enabled: destNumber >= 0 && sourceNumber >= 0
                                             hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
+                                            cursorShape: isDiagonal ? Qt.ArrowCursor
+                                                                    : Qt.PointingHandCursor
                                             onClicked: {
+                                                // A port cannot route to
+                                                // itself: it would echo its
+                                                // own output into its input.
+                                                if (isDiagonal)
+                                                    return
                                                 if (bridge.wouldCreateLoop(sourceNumber, destNumber)) {
                                                     loopDialog.src = sourceNumber
                                                     loopDialog.dst = destNumber
@@ -609,13 +621,32 @@ Item {
                                             onEntered: {
                                                 page.hoverRow = sourceIndex
                                                 page.hoverCol = index
-                                                hint.text = page.sourceNameAt(sourceIndex)
-                                                          + "   →   " + page.destNameAt(index)
+                                                hint.text = isDiagonal
+                                                    ? page.sourceNameAt(sourceIndex)
+                                                      + "   —   a port cannot route to itself"
+                                                    : page.sourceNameAt(sourceIndex)
+                                                      + "   →   " + page.destNameAt(index)
                                             }
+                                            // Only the cell that currently
+                                            // owns the crosshair may clear it.
+                                            //
+                                            // Qt promises no ordering between
+                                            // one MouseArea's exited and the
+                                            // next one's entered, and moving
+                                            // between adjacent cells often
+                                            // delivers entered first. An
+                                            // unconditional clear then wiped
+                                            // the hover the new cell had just
+                                            // set, which is why the crosshair
+                                            // appeared and vanished at random
+                                            // as the pointer moved.
                                             onExited: {
-                                                page.hoverRow = -1
-                                                page.hoverCol = -1
-                                                hint.text = ""
+                                                if (page.hoverRow === sourceIndex
+                                                        && page.hoverCol === index) {
+                                                    page.hoverRow = -1
+                                                    page.hoverCol = -1
+                                                    hint.text = ""
+                                                }
                                             }
                                         }
                                     }

@@ -74,7 +74,7 @@ Item {
             }
 
             FilterField {
-                label: "Filter name, kernel name or remark"
+                label: "Filter by alias, name or remark"
                 Layout.preferredWidth: Math.max(240, t.fs(280))
                 text: bridge.portsFilter
                 onTextChanged: bridge.setPortsFilter(text)
@@ -287,6 +287,7 @@ Item {
                                         color: t.text
                                         placeholderTextColor: t.dim
                                         font.pixelSize: t.fs(12)
+                                        font.weight: Font.DemiBold
                                         enabled: exists
                                         padding: 2
                                         background: Rectangle {
@@ -315,8 +316,9 @@ Item {
                                     TextField {
                                         Layout.fillWidth: true
                                         text: remark
+                                        id: remarkField
                                         placeholderText: "Remark"
-                                        color: t.dim
+                                        color: remarkField.text.length > 0 ? t.text : t.dim
                                         placeholderTextColor: t.dim
                                         font.pixelSize: t.fs(10)
                                         font.italic: true

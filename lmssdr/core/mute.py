@@ -32,6 +32,7 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
+from .. import APP_TITLE
 from . import audio
 from .alsaseq import Addr, AlsaSeqError, MidiEvent, Seq
 
@@ -258,7 +259,7 @@ class MuteService:
 
     def _run(self) -> None:
         try:
-            seq = Seq("MIDI Router (mute)", nonblock=True)
+            seq = Seq(f"{APP_TITLE} (mute)", nonblock=True)
         except AlsaSeqError as exc:
             self._error = str(exc)
             logger.error("mute listener could not open the sequencer: %s", exc)

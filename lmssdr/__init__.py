@@ -2,10 +2,10 @@
 
 #: Single source of truth for the version. pyproject.toml reads this
 #: attribute rather than carrying its own copy, so they cannot drift.
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 #: Display name, as shown in the window title, tray tooltip and dialogs.
-APP_TITLE = "MIDI Router"
+APP_TITLE = "LMSSDR MIDI Router"
 
 #: Longer name, for places with room for it (about box, desktop entry).
 APP_FULL_NAME = "Linux-MIDI-snd_seq_dummy-Router"

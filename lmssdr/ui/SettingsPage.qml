@@ -133,47 +133,6 @@ Item {
                 Rectangle { Layout.fillWidth: true; height: 1; color: t.line
                             Layout.topMargin: 8 }
 
-                SectionLabel { text: "Backup" }
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    color: t.dim
-                    font.pixelSize: t.fs(11)
-                    text: "Export writes everything this application has "
-                        + "saved — settings, port names and routing — into "
-                        + "one ZIP file. Import reads one back, and lets you "
-                        + "choose which parts to take."
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    ActionButton {
-                        text: "Export…"
-                        onClicked: exportDialog.open()
-                    }
-                    ActionButton {
-                        text: "Import…"
-                        onClicked: importDialog.open()
-                    }
-                    Item { Layout.fillWidth: true }
-                }
-
-                Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    color: t.dim
-                    font.pixelSize: t.fs(11)
-                    text: bridge.exportableFiles.length > 0
-                        ? "Will export: " + bridge.exportableFiles.join(", ")
-                        : "Nothing has been saved yet, so there is nothing to export."
-                }
-
-                Rectangle { Layout.fillWidth: true; height: 1; color: t.line
-                            Layout.topMargin: 8 }
-
                 SectionLabel { text: "Appearance" }
 
                 RowLayout {
@@ -220,6 +179,49 @@ Item {
 
                 Rectangle { Layout.fillWidth: true; height: 1; color: t.line
                             Layout.topMargin: 8 }
+
+                SectionLabel { text: "Backup" }
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: t.dim
+                    font.pixelSize: t.fs(11)
+                    text: "Export writes everything this application has "
+                        + "saved — settings, port names and routing — into "
+                        + "one ZIP file. Import reads one back, and lets you "
+                        + "choose which parts to take."
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    ActionButton {
+                        text: "Export…"
+                        onClicked: exportDialog.open()
+                    }
+                    ActionButton {
+                        text: "Import…"
+                        onClicked: importDialog.open()
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: t.dim
+                    font.pixelSize: t.fs(11)
+                    text: bridge.exportableFiles.length > 0
+                        ? "Will export: " + bridge.exportableFiles.join(", ")
+                        : "Nothing has been saved yet, so there is nothing to export."
+                }
+
+                Rectangle { Layout.fillWidth: true; height: 1; color: t.line
+                            Layout.topMargin: 8 }
+
+                SectionLabel { text: "About" }
 
                 Label {
                     text: bridge.appName + " " + bridge.appVersion

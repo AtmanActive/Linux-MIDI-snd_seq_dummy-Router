@@ -275,16 +275,16 @@ jobs:
           cat > notes.md <<EOF
           ## Install
 
-          **Debian 13 / Ubuntu** — uses the system Qt, about 200 kB:
+          **Debian 13 / Ubuntu**: uses the system Qt, about 200 kB:
 
               sudo apt install ./lmssdr_${VERSION}_all.deb
 
-          **Any other x86_64 Linux** — self-contained, no dependencies:
+          **Any other x86_64 Linux**: self-contained, no dependencies:
 
               chmod +x lmssdr-${VERSION}-x86_64.AppImage
               ./lmssdr-${VERSION}-x86_64.AppImage
 
-          **From PyPI-style wheel** — needs PySide6:
+          **From PyPI-style wheel**: needs PySide6:
 
               pip install lmssdr-${VERSION}-py3-none-any.whl
 
