@@ -36,10 +36,15 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # Without this, setup-uv looks for uv.lock or requirements*.txt,
+          # finds neither, and warns that its cache can never be invalidated.
+          # The dependencies live in pyproject.toml.
+          cache-dependency-glob: pyproject.toml
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -71,8 +76,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -86,7 +91,7 @@ jobs:
           python -m pip install --quiet twine
           twine check dist/*
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-dist
           path: |
@@ -99,9 +104,14 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # Without this, setup-uv looks for uv.lock or requirements*.txt,
+          # finds neither, and warns that its cache can never be invalidated.
+          # The dependencies live in pyproject.toml.
+          cache-dependency-glob: pyproject.toml
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -145,7 +155,7 @@ jobs:
           print("deb payload OK:", lmssdr.__version__)
           PY
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deb
           path: dist/*.deb
@@ -160,9 +170,14 @@ jobs:
     needs: test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          # Without this, setup-uv looks for uv.lock or requirements*.txt,
+          # finds neither, and warns that its cache can never be invalidated.
+          # The dependencies live in pyproject.toml.
+          cache-dependency-glob: pyproject.toml
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -215,7 +230,7 @@ jobs:
           PY
           rm -rf squashfs-root
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: appimage
           path: dist/*.AppImage
@@ -226,9 +241,9 @@ jobs:
     needs: [test, python-dist, deb, appimage]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

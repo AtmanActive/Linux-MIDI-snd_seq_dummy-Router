@@ -62,6 +62,7 @@ def qapp():
 @pytest.fixture
 def tray(qapp):
     from PySide6.QtCore import QObject
+    from lmssdr.core.module import ModuleState
     from lmssdr.core.settings import Settings
     from lmssdr.ui.bridge import Bridge
     from lmssdr.ui.tray import Tray
@@ -71,7 +72,14 @@ def tray(qapp):
         def raise_(self): pass
         def requestActivate(self): pass
 
-    bridge = Bridge(Settings.load())          # not started: no sequencer needed
+    bridge = Bridge(Settings())               # not started: no sequencer needed
+    # Pin the kernel state. Left alone, it is read from /sys/module, so the
+    # tray's tooltip would depend on whether the machine running the tests
+    # happens to have snd_seq_dummy loaded with a matching port count --
+    # true on a developer's desktop, false on every CI runner, and the
+    # tooltip says something different in each case.
+    bridge._module_state = ModuleState(loaded=True, duplex=False,
+                                       ports=bridge._settings.port_count)
     return Tray(bridge, FakeWindow()), bridge
 
 
@@ -92,7 +100,7 @@ def test_tray_follows_the_mute_state(tray):
 def test_tray_tooltip_mentions_the_port_count(tray):
     widget, bridge = tray
     bridge._live_ports = [0, 1, 2]
-    assert "ports" in widget._tooltip() or "not applied" in widget._tooltip()
+    assert "ports" in widget._tooltip()
 
 
 # -- themed icons ---------------------------------------------------------
@@ -152,7 +160,7 @@ def test_mute_state_change_reaches_the_gui_thread(qapp):
     from lmssdr.core.settings import Settings
     from lmssdr.ui.bridge import Bridge
 
-    bridge = Bridge(Settings.load())
+    bridge = Bridge(Settings())
     fired = []
     bridge.muteChanged.connect(lambda: fired.append(bridge.muteState))
 
