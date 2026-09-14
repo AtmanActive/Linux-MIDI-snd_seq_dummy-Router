@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>AtmanActive</vendor>
+  <vendor_url>https://github.com/AtmanActive/Linux-MIDI-snd_seq_dummy-Router</vendor_url>
+
+  <!-- allow_active is auth_admin_keep rather than auth_admin so that a user
+       adjusting the port count a few times in a row is asked once, not once
+       per attempt. The grant is per-session and expires with it. -->
+  <action id="org.atmanactive.lmssdr.manage-module">
+    <description>Change the number of MIDI Through ports</description>
+    <description xml:lang="en_GB">Change the number of MIDI Through ports</description>
+    <message>Authentication is required to reload the snd_seq_dummy kernel module</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lmssdr/lmssdr-module-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

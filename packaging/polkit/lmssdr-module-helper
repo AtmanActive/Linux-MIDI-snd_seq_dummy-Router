@@ -1,0 +1,60 @@
+#!/bin/sh
+#
+# lmssdr-module-helper - reload snd_seq_dummy with a chosen port count.
+#
+# Runs as root via pkexec; see org.atmanactive.lmssdr.policy. This is the only
+# privileged code in the project, so it stays small and its argument handling
+# stays strict: exactly one option, an integer, range-checked, and nothing
+# from the caller ever reaches a shell.
+#
+set -eu
+
+MODULE=snd_seq_dummy
+CONF=/etc/modprobe.d/lmssdr.conf
+# Written by an earlier version under a different name. modprobe reads
+# every file in the directory, so leaving it would let the old port
+# count win at the next boot.
+LEGACY_CONF=/etc/modprobe.d/lmsdr.conf
+MIN_PORTS=1
+MAX_PORTS=254            # SNDRV_SEQ_MAX_PORTS
+
+PATH=/usr/sbin:/sbin:/usr/bin:/bin
+export PATH
+
+usage() {
+    echo "usage: ${0##*/} --ports N        (N = $MIN_PORTS..$MAX_PORTS)" >&2
+    exit 2
+}
+
+[ $# -eq 2 ] || usage
+[ "$1" = "--ports" ] || usage
+ports=$2
+
+case $ports in
+    '' | *[!0-9]*) usage ;;
+esac
+[ "$ports" -ge "$MIN_PORTS" ] || usage
+[ "$ports" -le "$MAX_PORTS" ] || usage
+
+# Persist first. If the reload below fails because something still holds the
+# module, at least the next boot comes up with what the user asked for.
+umask 022
+cat > "$CONF" <<CONFEOF
+# Written by Linux-MIDI-snd_seq_dummy-Router. Edited by hand? The app will
+# overwrite this file the next time the port count is changed.
+#
+# duplex=0 is required, not a preference: duplex mode renames the ports to
+# "Port-N:A"/"Port-N:B" and cross-forwards each pair to its partner.
+options $MODULE ports=$ports duplex=0
+CONFEOF
+
+rm -f "$LEGACY_CONF"
+
+if [ -d "/sys/module/$MODULE" ]; then
+    if ! modprobe -r "$MODULE" 2>/dev/null; then
+        echo "$MODULE is in use and could not be unloaded" >&2
+        exit 1
+    fi
+fi
+
+modprobe "$MODULE" ports="$ports" duplex=0

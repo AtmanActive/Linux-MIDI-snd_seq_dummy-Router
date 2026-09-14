@@ -1,0 +1,46 @@
+[project]
+name = "lmssdr"
+dynamic = ["version"]
+description = "Control and route ALSA snd_seq_dummy MIDI ports on Linux, with a MIDI-driven microphone mute"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "AtmanActive" }]
+keywords = ["midi", "alsa", "snd_seq_dummy", "kde", "plasma", "pipewire"]
+
+# No MIDI library: core.alsaseq is a ctypes binding to libasound, which every
+# ALSA system already has. python-rtmidi cannot see or create sequencer
+# subscriptions, which is the one thing this application is for.
+dependencies = [
+    "PySide6>=6.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[project.scripts]
+lmssdr = "lmssdr.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "lmssdr.__version__" }
+
+# setuptools cannot resolve `urls` dynamically, so this literal is the one
+# place the homepage is duplicated from lmssdr.APP_HOMEPAGE.
+# tests/test_metadata.py asserts the two stay identical.
+[project.urls]
+Homepage = "https://github.com/AtmanActive/Linux-MIDI-snd_seq_dummy-Router"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["lmssdr*"]
+
+[tool.setuptools.package-data]
+"lmssdr.ui" = ["*.qml"]
+"lmssdr.resources" = ["*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
