@@ -13,12 +13,14 @@ This app comes as a helper to make the MIDI port management human friendly.
 
 ## Screenshots
 <details>
-  ![Screenshot 1](screenshots/lmssdr_screenshot_1.png)
-  ![Screenshot 2](screenshots/lmssdr_screenshot_2.png)
-  ![Screenshot 3](screenshots/lmssdr_screenshot_3.png)
-  ![Screenshot 4](screenshots/lmssdr_screenshot_4.png)
-  ![Screenshot 5](screenshots/lmssdr_screenshot_5.png)
-  ![Screenshot 6](screenshots/lmssdr_screenshot_6.png)
+  
+![Screenshot 1](screenshots/lmssdr_screenshot_1.png)
+![Screenshot 2](screenshots/lmssdr_screenshot_2.png)
+![Screenshot 3](screenshots/lmssdr_screenshot_3.png)
+![Screenshot 4](screenshots/lmssdr_screenshot_4.png)
+![Screenshot 5](screenshots/lmssdr_screenshot_5.png)
+![Screenshot 6](screenshots/lmssdr_screenshot_6.png)
+
 </details>
 
 ## Install
@@ -107,6 +109,8 @@ routing, if so desired. Imported routing is re-applied to the kernel authoritati
 replaced files are kept alongside as `*.pre-import`. An imported port count  
 is the one thing you must **Apply** yourself as it reloads a kernel module  
 and needs your password.
+
+You can find pre-populated settings exports in the [settings directory](tree/main/settings).
 
 ## Where your data lives
 
