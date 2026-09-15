@@ -110,7 +110,7 @@ replaced files are kept alongside as `*.pre-import`. An imported port count
 is the one thing you must **Apply** yourself as it reloads a kernel module  
 and needs your password.
 
-You can find pre-populated settings exports in the [settings directory](tree/main/settings).
+You can find pre-populated settings exports in the [settings directory](https://github.com/AtmanActive/Linux-MIDI-snd_seq_dummy-Router/tree/main/settings).
 
 ## Where your data lives
 
