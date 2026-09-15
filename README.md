@@ -1,20 +1,25 @@
 # Linux MIDI snd_seq_dummy Router
 
-A desktop app that controls ALSA's [`snd_seq_dummy`]([https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c](https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c)) MIDI ports: how many there  
-are, what you call them, and how they are wired to each other. Plus a  
-MIDI-driven microphone mute/unmute driven by Mackie Control MIDI transport signals. Built for KDE Plasma on Wayland, tested on  
-Debian 13.
+A desktop app that controls ALSA's [snd_seq_dummy](https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c) MIDI ports: how many there are, what you call them, and how they are wired to each other. 
+Plus a MIDI-driven microphone mute/unmute by Mackie Control MIDI transport signals. 
+Built for KDE Plasma on Wayland, tested on Debian 13.
 
 ## Why
 
-Chromium's [Web MIDI]([https://github.com/AtmanActive/webmidi-rtc-transport](https://github.com/AtmanActive/webmidi-rtc-transport)) on Linux only exposes sequencer ports whose ALSA client  
-id is below 16. `snd_seq_dummy` takes id 14; sound cards start at 16, and  
-userspace virtual-cable tools (Bome Network, a2jmidid, anything on rtmidi)  
-land at 128 and above, invisible to browsers. [Reaper](https://reaper.fm) ignores userspace  
-clients too.
+Chromium's [Web MIDI](https://github.com/AtmanActive/webmidi-rtc-transport) on Linux only exposes sequencer ports whose ALSA client id is below 16. `snd_seq_dummy` takes the id 14; sound cards start at #16, while userspace virtual-cable tools (like Bome Network, a2jmidid, anything on rtmidi) land at #128 and above, invisible to browsers. [Reaper](https://reaper.fm) ignores userspace clients too.
 
-So `snd_seq_dummy` is the one port source browsers and DAWs both agree on, but it is bare: a fixed port count chosen at module load, names hardcoded to  
-`Midi Through Port-N`, and no way to rename them. This app comes as a helper to make management human friendly.
+So `snd_seq_dummy` is the one port source browsers and DAWs both agree on, but it is bare: a fixed port count chosen at module load, names hardcoded to `Midi Through Port-N`, and no way to rename them. 
+This app comes as a helper to make the MIDI port management human friendly.
+
+## Screenshots
+<details>
+  ![Screenshot 1](screenshots/lmssdr_screenshot_1.png)
+  ![Screenshot 2](screenshots/lmssdr_screenshot_2.png)
+  ![Screenshot 3](screenshots/lmssdr_screenshot_3.png)
+  ![Screenshot 4](screenshots/lmssdr_screenshot_4.png)
+  ![Screenshot 5](screenshots/lmssdr_screenshot_5.png)
+  ![Screenshot 6](screenshots/lmssdr_screenshot_6.png)
+</details>
 
 ## Install
 
