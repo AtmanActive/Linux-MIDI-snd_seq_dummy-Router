@@ -23,7 +23,7 @@ from ..core import archive, audio, autostart, module
 from ..core.mute import MuteRules, MuteService
 from ..core.alsaseq import AlsaSeqError, Seq
 from ..core.ports import (PORT_COLOUR_NAMES, PORT_COLOURS, PortNames,
-                          colour_hex)
+                          colour_hex, matches as port_matches)
 from ..core.routing import (Link, Routing, adopt, apply as apply_routing,
                             export_links, forget_inactive, live_links,
                             set_link)
@@ -913,15 +913,59 @@ class Bridge(QObject):
         """Matrix columns."""
         return self._describe(self._dest_numbers())
 
+    def _visible_route(self):
+        """A predicate over (source, dest) for the list and graph views.
+
+        The same question the matrix asks of each axis -- does this port
+        match the text? -- asked of each end of a route. A route survives
+        when its source matches the From filter and its destination matches
+        the To filter.
+
+        Deliberately *not* "is this port in sourcePorts": those lists are
+        drawn from the live ports, because the matrix can only offer cells
+        for ports that exist. A saved route whose port has since gone away
+        still belongs in the list, which is the one place it can be seen and
+        deleted, so liveness must not be part of this test.
+
+        Returns a closure, and the no-filter case returns a constant one, so
+        the common path costs nothing per route.
+        """
+        if not self._filter_from.strip() and not self._filter_to.strip():
+            return lambda source, dest: True
+        return lambda source, dest: (
+            port_matches(self._names.get(source), self._filter_from)
+            and port_matches(self._names.get(dest), self._filter_to))
+
     @Property("QVariant", notify=routingChanged)
     def graphPorts(self) -> List[dict]:
-        """Nodes for the graph: anything either filter lets through.
+        """Nodes for the graph.
 
-        A union rather than an intersection, so a route whose two ends match
-        different filters is still drawn with both of its endpoints.
+        Unfiltered, every live port, so the graph is a picture of the whole
+        machine and an unrouted port is visibly unrouted.
+
+        Filtered, only the ports the surviving routes actually touch. The
+        matrix keeps its empty rows and columns because the grid is where you
+        *make* routes and an empty cell is the thing you click; the graph
+        draws no such affordance, so a ring of unconnected dots is noise
+        around the handful of edges the filter was asked to isolate.
+
+        Both endpoints of every drawn edge are included, so an edge can never
+        reference a node that is not there.
         """
-        wanted = set(self._source_numbers()) | set(self._dest_numbers())
+        if not self.filtersActive:
+            return self._describe(self._live_ports)
+        visible = self._visible_route()
+        wanted = set()
+        for source, dest in self._route_pairs():
+            if visible(source, dest):
+                wanted.update((source, dest))
         return self._describe([n for n in self._live_ports if n in wanted])
+
+    def _route_pairs(self) -> set:
+        """Every (source, dest) that is saved, live, or both."""
+        pairs = {(l.source, l.dest) for l in self._routing.links()}
+        pairs |= {(l.source, l.dest) for l in self._live_links}
+        return pairs
 
     @Property(bool, notify=routingChanged)
     def filtersActive(self) -> bool:
@@ -962,13 +1006,18 @@ class Bridge(QObject):
 
     @Property("QVariant", notify=routingChanged)
     def links(self) -> List[dict]:
-        """Every route, saved or live, for the graph view."""
+        """Routes for the graph view, saved or live.
+
+        Filtered the same way the matrix is: a route is drawn when its source
+        passes the From filter and its destination passes the To filter.
+        """
         seen = {(l.source, l.dest) for l in self._routing.links()}
         seen |= {(l.source, l.dest) for l in self._live_links}
+        visible = self._visible_route()
         return [{"from": s, "to": d,
                  "saved": self._routing.has(s, d),
                  "live": Link(s, d) in self._live_links}
-                for s, d in sorted(seen)]
+                for s, d in sorted(seen) if visible(s, d)]
 
     @Property("QVariant", notify=routingChanged)
     def routeRows(self) -> List[dict]:
@@ -986,8 +1035,11 @@ class Bridge(QObject):
         known = set(ordered)
         ordered += sorted((l.source, l.dest) for l in self._live_links
                           if (l.source, l.dest) not in known)
+        visible = self._visible_route()
         rows = []
         for source, dest in ordered:
+            if not visible(source, dest):
+                continue
             rows.append({
                 "source": self._port_detail(source),
                 "dest": self._port_detail(dest),
@@ -1080,6 +1132,15 @@ class Bridge(QObject):
     @Property(int, notify=routingChanged)
     def savedLinkCount(self) -> int:
         return len(self._routing)
+
+    @Property(int, notify=routingChanged)
+    def totalRouteCount(self) -> int:
+        """Every route the list would show with no filter applied.
+
+        Paired with len(routeRows) so the toolbar can say "3 of 11" on the
+        list and graph views, where "1x32 of 32 ports" means nothing.
+        """
+        return len(self._route_pairs())
 
     @Property(int, notify=routingChanged)
     def unmanagedLinkCount(self) -> int:
@@ -1193,6 +1254,28 @@ class Bridge(QObject):
         self.noticeRaised.emit(
             ", ".join(parts) if parts
             else "The saved routing already matched the kernel.")
+
+    @Slot(bool)
+    def sortRouting(self, by_source: bool) -> None:
+        """Reorder the saved routing and write it out.
+
+        A durable edit, not a view option: the file is the list's order, so
+        sorting it here is what makes the order survive a restart.
+
+        Only the saved routes move. Live connections this app has not been
+        told about are appended to the list after them and have nowhere to be
+        written, so Sync from Kernel comes first if you want those sorted in.
+        """
+        if not self._routing.sort(by_source=by_source):
+            self.noticeRaised.emit(
+                "The routing was already in that order.")
+            return
+        self._routing.save()
+        self.routingChanged.emit()
+        count = len(self._routing)
+        self.noticeRaised.emit(
+            f"{count} route{'' if count == 1 else 's'} sorted by "
+            f"{'source' if by_source else 'destination'} and saved.")
 
     @Slot()
     def clearRouting(self) -> None:

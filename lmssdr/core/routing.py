@@ -96,6 +96,10 @@ class Routing:
     saved that way, because the list view shows them in this order: a new
     route has to appear at the bottom where the user just added it, and
     re-pointing one must not make its row jump somewhere else.
+
+    `sort()` reorders the list on request, and the new order is what gets
+    saved -- so sorting is a durable edit to the file, not a way of looking
+    at it.
     """
 
     def __init__(self, links: Optional[Iterable[Link]] = None):
@@ -182,6 +186,25 @@ class Routing:
 
     def clear(self) -> None:
         self._links = []
+
+    def sort(self, by_source: bool = True) -> bool:
+        """Reorder the whole list. Returns True if anything moved.
+
+        Creation order is the default because a route the user just added
+        must appear where they added it. But a list that has been edited for
+        a while stops having an order anyone remembers, and then the only
+        useful order is by number -- so this is offered as an explicit act,
+        not applied behind the user's back.
+
+        The other end breaks ties, so the secondary order is always defined
+        and the same list always sorts to the same arrangement: by source
+        11->10 precedes 11->11, and by destination 10->11 precedes 11->11.
+        """
+        before = list(self._links)
+        key = ((lambda l: (l.source, l.dest)) if by_source
+               else (lambda l: (l.dest, l.source)))
+        self._links.sort(key=key)
+        return self._links != before
 
     def swap_ports(self, a: int, b: int) -> List[Link]:
         """Rewrite every route as if the two ports had changed places.

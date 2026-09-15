@@ -160,10 +160,34 @@ def test_remark_only_match_is_included(named_bridge):
     assert 5 in [p["number"] for p in named_bridge.sourcePorts]
 
 
-def test_graph_ports_are_the_union_of_both_filters(named_bridge):
+def test_graph_shows_every_live_port_when_unfiltered(named_bridge):
+    """A picture of the whole machine, where an unrouted port looks it."""
+    assert [p["number"] for p in named_bridge.graphPorts] == [0, 1, 2, 3, 4, 5]
+
+
+def test_graph_narrows_to_the_ports_the_surviving_routes_touch(named_bridge):
+    named_bridge._routing.add(2, 1)         # Keys Send -> Drums Send
+    named_bridge._routing.add(0, 3)         # neither end matches
     named_bridge.setFilterFrom("keys")      # 2
     named_bridge.setFilterTo("drums")       # 1, 4, 5
-    assert [p["number"] for p in named_bridge.graphPorts] == [1, 2, 4, 5]
+    assert [p["number"] for p in named_bridge.graphPorts] == [1, 2]
+
+
+def test_every_drawn_edge_has_both_of_its_nodes(named_bridge):
+    """An edge referencing a missing node would silently not be drawn."""
+    for pair in [(2, 1), (1, 4), (0, 3), (5, 2)]:
+        named_bridge._routing.add(*pair)
+    named_bridge.setFilterTo("drums")
+    nodes = {p["number"] for p in named_bridge.graphPorts}
+    for link in named_bridge.links:
+        assert link["from"] in nodes and link["to"] in nodes
+
+
+def test_a_filter_matching_ports_with_no_routes_empties_the_graph(named_bridge):
+    named_bridge._routing.add(0, 3)
+    named_bridge.setFilterFrom("drums")     # 1, 4, 5 -- none of them route
+    assert named_bridge.graphPorts == []
+    assert named_bridge.links == []
 
 
 def test_filters_active_flag(named_bridge):
@@ -795,3 +819,188 @@ def test_start_announces_the_mute_state(bridge, monkeypatch):
     bridge.start()
     bridge._timer.stop()
     assert fired, "muteChanged was not emitted on start"
+
+
+# -- the From/To filters reach all three views ---------------------------
+
+@pytest.fixture
+def filtered(bridge):
+    """Four live ports, two named, and three routes between them."""
+    bridge._names.set_name(0, "Drums")
+    bridge._names.set_name(1, "Keys")
+    bridge._names.set_name(2, "Vox")
+    bridge._routing.add(0, 1)      # Drums -> Keys
+    bridge._routing.add(1, 2)      # Keys  -> Vox
+    bridge._routing.add(2, 0)      # Vox   -> Drums
+    return bridge
+
+
+def pairs_of(rows):
+    return [(r["source"]["number"], r["dest"]["number"]) for r in rows]
+
+
+def edges_of(links):
+    return [(l["from"], l["to"]) for l in links]
+
+
+def test_the_list_is_unfiltered_by_default(filtered):
+    assert pairs_of(filtered.routeRows) == [(0, 1), (1, 2), (2, 0)]
+
+
+def test_the_from_filter_narrows_the_list(filtered):
+    filtered.setFilterFrom("Keys")
+    assert pairs_of(filtered.routeRows) == [(1, 2)]
+
+
+def test_the_to_filter_narrows_the_list(filtered):
+    filtered.setFilterTo("Drums")
+    assert pairs_of(filtered.routeRows) == [(2, 0)]
+
+
+def test_both_filters_are_ANDed_in_the_list(filtered):
+    filtered.setFilterFrom("Drums")
+    filtered.setFilterTo("Vox")
+    assert pairs_of(filtered.routeRows) == []
+    filtered.setFilterTo("Keys")
+    assert pairs_of(filtered.routeRows) == [(0, 1)]
+
+
+def test_the_graph_edges_follow_the_same_filters(filtered):
+    """List and graph must never disagree about which routes exist."""
+    assert edges_of(filtered.links) == [(0, 1), (1, 2), (2, 0)]
+    filtered.setFilterFrom("Keys")
+    assert edges_of(filtered.links) == [(1, 2)]
+    assert pairs_of(filtered.routeRows) == edges_of(filtered.links)
+
+
+def test_the_matrix_and_the_list_agree_under_a_filter(filtered):
+    """The matrix shows cells, the list shows routes; the same ones."""
+    filtered.setFilterFrom("Keys")
+    sources = [p["number"] for p in filtered.sourcePorts]
+    dests = [p["number"] for p in filtered.destPorts]
+    from_matrix = [(sources[r], dests[c])
+                   for r, row in enumerate(filtered.matrix)
+                   for c, cell in enumerate(row) if cell & 1]
+    assert sorted(from_matrix) == sorted(pairs_of(filtered.routeRows))
+
+
+def test_clearing_the_filters_restores_every_route(filtered):
+    filtered.setFilterFrom("Drums")
+    filtered.setFilterTo("Keys")
+    assert len(filtered.routeRows) == 1
+    filtered.setFilterFrom("")
+    filtered.setFilterTo("")
+    assert len(filtered.routeRows) == 3
+
+
+def test_a_filter_matches_the_kernel_name_and_the_remark_too(filtered):
+    """Same search as the matrix axes: all three of a port's names."""
+    filtered._names.set_remark(1, "from the live room")
+    filtered.setFilterFrom("live room")
+    assert pairs_of(filtered.routeRows) == [(1, 2)]
+    filtered.setFilterFrom("Port-2")          # the kernel name
+    assert pairs_of(filtered.routeRows) == [(2, 0)]
+
+
+def test_a_route_to_an_absent_port_stays_in_the_list(bridge):
+    """The list is the only place such a route can be seen and deleted.
+
+    Filtering by membership of sourcePorts would drop it, because those
+    lists hold live ports only -- which is right for the matrix axes and
+    wrong here.
+    """
+    bridge._routing.add(9, 8)              # neither port is live
+    assert pairs_of(bridge.routeRows) == [(9, 8)]
+    assert edges_of(bridge.links) == [(9, 8)]
+    assert bridge.routeRows[0]["source"]["exists"] is False
+
+
+def test_an_absent_port_can_still_be_filtered_for(bridge):
+    bridge._routing.add(9, 8)
+    bridge._names.set_name(9, "Unplugged")
+    bridge.setFilterFrom("Unplugged")
+    assert pairs_of(bridge.routeRows) == [(9, 8)]
+    bridge.setFilterFrom("something else")
+    assert pairs_of(bridge.routeRows) == []
+
+
+def test_changing_a_filter_tells_the_views_to_redraw(filtered):
+    """routingChanged is what the list model and the canvas listen to."""
+    fired = []
+    filtered.routingChanged.connect(lambda: fired.append(1))
+    filtered.setFilterFrom("Keys")
+    assert fired
+
+
+# -- sorting the list ----------------------------------------------------
+
+def test_sort_by_source_reorders_and_saves(bridge):
+    for pair in [(3, 1), (1, 2), (2, 0)]:
+        bridge._routing.add(*pair)
+    bridge.sortRouting(True)
+    assert pairs_of(bridge.routeRows) == [(1, 2), (2, 0), (3, 1)]
+    # The file, not just the object: sorting is meant to survive a restart.
+    assert [(l.source, l.dest) for l in Routing.load().links()] == \
+        [(1, 2), (2, 0), (3, 1)]
+
+
+def test_sort_by_destination_reorders_and_saves(bridge):
+    for pair in [(3, 1), (1, 2), (2, 0)]:
+        bridge._routing.add(*pair)
+    bridge.sortRouting(False)
+    assert pairs_of(bridge.routeRows) == [(2, 0), (3, 1), (1, 2)]
+    assert [(l.source, l.dest) for l in Routing.load().links()] == \
+        [(2, 0), (3, 1), (1, 2)]
+
+
+def test_sorting_tells_the_views_to_redraw(bridge):
+    for pair in [(3, 1), (1, 2)]:
+        bridge._routing.add(*pair)
+    fired = []
+    bridge.routingChanged.connect(lambda: fired.append(1))
+    bridge.sortRouting(True)
+    assert fired
+
+
+def test_sorting_an_already_sorted_list_says_so_and_does_not_rewrite(bridge):
+    for pair in [(1, 2), (3, 1)]:
+        bridge._routing.add(*pair)
+    bridge._routing.save()
+    before = Routing.path().stat().st_mtime_ns
+    notices = []
+    bridge.noticeRaised.connect(notices.append)
+    bridge.sortRouting(True)
+    assert "already in that order" in notices[-1]
+    assert Routing.path().stat().st_mtime_ns == before
+
+
+def test_sorting_does_not_touch_the_kernel(bridge):
+    """Order is presentation. The same routes are connected either way."""
+    seq = RecordingSeq(live=[(3, 1), (1, 2)])
+    bridge._seq = seq
+    for pair in [(3, 1), (1, 2)]:
+        bridge._routing.add(*pair)
+    before = seq.connections()
+    bridge.sortRouting(True)
+    assert seq.connections() == before
+    assert seq.disconnected == []
+
+
+def test_sorting_leaves_unsaved_live_routes_at_the_end(bridge):
+    """They are not in the file, so there is nowhere to sort them to."""
+    bridge._routing.add(3, 1)
+    bridge._routing.add(1, 2)
+    bridge._live_links = {Link(0, 3)}
+    bridge.sortRouting(True)
+    assert pairs_of(bridge.routeRows) == [(1, 2), (3, 1), (0, 3)]
+
+
+def test_the_notice_counts_what_was_sorted(bridge):
+    for pair in [(3, 1), (1, 2), (2, 0)]:
+        bridge._routing.add(*pair)
+    notices = []
+    bridge.noticeRaised.connect(notices.append)
+    bridge.sortRouting(True)
+    assert "3 routes sorted by source" in notices[-1]
+    bridge.sortRouting(False)
+    assert "sorted by destination" in notices[-1]

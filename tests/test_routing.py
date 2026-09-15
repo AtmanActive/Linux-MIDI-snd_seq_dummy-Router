@@ -372,3 +372,88 @@ def test_swap_never_creates_a_self_route_or_a_duplicate():
     links = r.links()
     assert all(l.source != l.dest for l in links)
     assert len(set(links)) == len(links)
+
+
+# -- sorting --------------------------------------------------------------
+
+def pairs(routing):
+    return [(l.source, l.dest) for l in routing.links()]
+
+
+def build(*routes):
+    r = Routing()
+    for source, dest in routes:
+        r.add(source, dest)
+    return r
+
+
+def test_sort_by_source():
+    r = build((5, 2), (1, 9), (3, 0))
+    assert r.sort(by_source=True) is True
+    assert pairs(r) == [(1, 9), (3, 0), (5, 2)]
+
+
+def test_sort_by_destination():
+    r = build((5, 2), (1, 9), (3, 0))
+    assert r.sort(by_source=False) is True
+    assert pairs(r) == [(3, 0), (5, 2), (1, 9)]
+
+
+def test_equal_sources_break_the_tie_on_the_destination():
+    """The spec's example, with a legal pair: 11->10 before 11->12.
+
+    (11->11 cannot exist -- a port routing to itself would echo its own
+    output into its input, and is_legal refuses it.)
+    """
+    r = build((11, 12), (11, 10), (11, 2))
+    r.sort(by_source=True)
+    assert pairs(r) == [(11, 2), (11, 10), (11, 12)]
+
+
+def test_equal_destinations_break_the_tie_on_the_source():
+    """The other example: 10->11 before 12->11."""
+    r = build((12, 11), (10, 11), (2, 11))
+    r.sort(by_source=False)
+    assert pairs(r) == [(2, 11), (10, 11), (12, 11)]
+
+
+def test_sorting_is_by_number_not_by_text():
+    """9 must not land after 10, which is what string keys would do."""
+    r = build((10, 0), (9, 0), (2, 0))
+    r.sort(by_source=True)
+    assert pairs(r) == [(2, 0), (9, 0), (10, 0)]
+
+
+def test_sort_reports_when_nothing_moved():
+    r = build((3, 4), (1, 2))
+    assert r.sort(by_source=True) is True
+    assert r.sort(by_source=True) is False      # already in that order
+
+
+def test_sorting_an_empty_or_single_route_list_is_a_no_op():
+    assert Routing().sort() is False
+    assert build((4, 5)).sort() is False
+
+
+def test_sorting_keeps_every_route():
+    routes = [(5, 2), (1, 9), (3, 0), (9, 1)]
+    r = build(*routes)
+    r.sort(by_source=False)
+    assert sorted(pairs(r)) == sorted(routes)
+    assert len(r) == len(routes)
+
+
+def test_the_two_orders_differ():
+    r1 = build((5, 1), (2, 9))
+    r2 = build((5, 1), (2, 9))
+    r1.sort(by_source=True)
+    r2.sort(by_source=False)
+    assert pairs(r1) == [(2, 9), (5, 1)]
+    assert pairs(r2) == [(5, 1), (2, 9)]
+
+
+def test_a_sorted_order_survives_a_save_and_load():
+    r = build((5, 2), (1, 9), (3, 0))
+    r.sort(by_source=True)
+    r.save()
+    assert pairs(Routing.load()) == [(1, 9), (3, 0), (5, 2)]

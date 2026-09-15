@@ -56,6 +56,24 @@ Item {
     function sourceNameAt(i)   { var p = sources[i]; return p ? p.displayName : "" }
     function destNameAt(i)     { var p = dests[i];   return p ? p.displayName : "" }
 
+    // "001: Alias (remark)" -- everything known about a port on one line.
+    //
+    // Shared by the matrix crosshair and the graph, so hovering the same
+    // port in two views says the same thing. The number is padded to three
+    // digits as it is everywhere else in the app, which also keeps the
+    // readout from shifting sideways as the pointer moves between ports.
+    //
+    // The kernel name is not repeated here: at 254 ports it is always
+    // "Midi Through Port-N", which the number has already said.
+    function describePort(p) {
+        if (!p) return ""
+        var text = ("00" + p.number).slice(-3) + ": " + p.displayName
+        return (p.remark && p.remark.length > 0)
+            ? text + " (" + p.remark + ")" : text
+    }
+    function sourceDescAt(i) { return describePort(sources[i]) }
+    function destDescAt(i)   { return describePort(dests[i]) }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
@@ -81,10 +99,16 @@ Item {
                 font.pixelSize: t.fs(11)
             }
 
+            // What the filter is currently hiding, counted in the units the
+            // view in front of you actually has: the matrix is a grid of
+            // ports, the other two are lists of routes.
             Label {
                 visible: bridge.filtersActive
-                text: "· showing " + page.sources.length + "×" + page.dests.length
+                text: views.currentIndex === 1
+                    ? "· showing " + page.sources.length + "×" + page.dests.length
                       + " of " + bridge.totalRoutablePortCount + " ports"
+                    : "· showing " + bridge.routeRows.length + " of "
+                      + bridge.totalRouteCount + " routes"
                 color: t.accent
                 font.pixelSize: t.fs(11)
             }
@@ -125,13 +149,18 @@ Item {
         // on.
         RowLayout {
             Layout.fillWidth: true
-            // Filters act on the matrix axes; the list shows whole routes and
-            // has nothing to filter by axis.
-            visible: bridge.totalRoutablePortCount > 0 && views.currentIndex === 1
+            // On every view, not just the matrix. The three views show the
+            // same routing in three shapes, so a filter that applied to only
+            // one of them would mean switching view silently changed what
+            // you were looking at.
+            visible: bridge.totalRoutablePortCount > 0
             spacing: 8
 
+            // "Rows" and "Columns" name where the matrix puts each end. The
+            // list and the graph have neither, so there they are just the
+            // two ends of a route.
             Label {
-                text: "Rows (from)"
+                text: views.currentIndex === 1 ? "Rows (from)" : "From"
                 color: t.dim
                 font.pixelSize: t.fs(11)
             }
@@ -144,7 +173,7 @@ Item {
             }
 
             Label {
-                text: "Columns (to)"
+                text: views.currentIndex === 1 ? "Columns (to)" : "To"
                 color: t.dim
                 font.pixelSize: t.fs(11)
                 leftPadding: t.fs(6)
@@ -171,13 +200,20 @@ Item {
             visible: bridge.totalRoutablePortCount === 0
                      || (views.currentIndex === 1
                          && (page.sources.length === 0 || page.dests.length === 0))
+                     || (views.currentIndex === 2 && page.nodes.length === 0)
             wrapMode: Text.WordWrap
             color: t.dim
             font.pixelSize: t.fs(12)
             text: bridge.totalRoutablePortCount === 0
                 ? "No ports to route. Set a port count in Settings and apply it."
-                : "No ports match the filter. Searching covers the custom "
-                  + "name, the kernel name and the remark."
+                // The graph draws routes, so an empty graph means no route
+                // survived -- not that no port matched. Saying "no ports"
+                // there would send you looking for the wrong mistake.
+                : views.currentIndex === 2
+                  ? "No routes match the filter. The graph shows only the "
+                    + "ports that the surviving routes connect."
+                  : "No ports match the filter. Searching covers the custom "
+                    + "name, the kernel name and the remark."
         }
 
         StackLayout {
@@ -218,12 +254,27 @@ Item {
                             font.pixelSize: t.fs(11)
                         }
                         Item { Layout.fillWidth: true }
+
+                        // Right-hand side: these reorder the saved file, so
+                        // they sit away from Add rather than beside it.
+                        ActionButton {
+                            text: "Sort by Source"
+                            enabled: bridge.savedLinkCount > 1
+                            onClicked: bridge.sortRouting(true)
+                        }
+                        ActionButton {
+                            text: "Sort by Destination"
+                            enabled: bridge.savedLinkCount > 1
+                            onClicked: bridge.sortRouting(false)
+                        }
                     }
 
                     Label {
                         Layout.fillWidth: true
                         visible: routeList.count === 0
-                        text: "No routes yet. Add one, or connect ports in the matrix."
+                        text: bridge.filtersActive
+                            ? "No routes match the filter."
+                            : "No routes yet. Add one, or connect ports in the matrix."
                         color: t.dim
                         font.pixelSize: t.fs(12)
                         topPadding: 8
@@ -622,10 +673,10 @@ Item {
                                                 page.hoverRow = sourceIndex
                                                 page.hoverCol = index
                                                 hint.text = isDiagonal
-                                                    ? page.sourceNameAt(sourceIndex)
+                                                    ? page.sourceDescAt(sourceIndex)
                                                       + "   —   a port cannot route to itself"
-                                                    : page.sourceNameAt(sourceIndex)
-                                                      + "   →   " + page.destNameAt(index)
+                                                    : page.sourceDescAt(sourceIndex)
+                                                      + "   →   " + page.destDescAt(index)
                                             }
                                             // Only the cell that currently
                                             // owns the crosshair may clear it.
@@ -785,8 +836,7 @@ Item {
                             }
                             page.selected = bestDist < Math.max(18, t.fs(20)) ? best : -1
                             hint.text = page.selected >= 0
-                                ? canvas.ports[page.selected].displayName
-                                  + "  (" + canvas.ports[page.selected].kernelName + ")"
+                                ? page.describePort(canvas.ports[page.selected])
                                 : ""
                         }
                         onExited: { page.selected = -1; hint.text = "" }
@@ -795,49 +845,23 @@ Item {
             }
         }
 
-        // ---- legend and hover readout ----------------------------------
+        // ---- hover readout ---------------------------------------------
+        //
+        // The whole row, to itself. It used to share the line with a colour
+        // legend, which cost more than it explained: the legend said the
+        // same four things forever, while the readout changes with every
+        // cell and had to elide to fit beside it.
         RowLayout {
             Layout.fillWidth: true
             spacing: 14
 
-            Repeater {
-                model: [
-                    { c: "accent", text: "saved and active" },
-                    { c: "warn",   text: "active but not saved" },
-                    { c: "dim",    text: "saved, not yet applied" },
-                    { c: "wash",   text: "shaded half: to a lower-numbered port" }
-                ]
-                delegate: RowLayout {
-                    required property var modelData
-                    spacing: 5
-                    Rectangle {
-                        width: t.fs(10); height: t.fs(10); radius: 2
-                        color: modelData.c === "accent" ? t.accent
-                             : modelData.c === "warn" ? t.warn
-                             : modelData.c === "wash"
-                               ? Qt.rgba(t.accent.r, t.accent.g, t.accent.b,
-                                         t.isDark ? 0.13 : 0.10)
-                             : t.dim
-                        // The wash swatch is nearly transparent, so it needs
-                        // an outline to be a swatch at all.
-                        border.color: modelData.c === "wash" ? t.line : "transparent"
-                    }
-                    Label {
-                        text: modelData.text
-                        color: t.dim
-                        font.pixelSize: t.fs(10)
-                    }
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
             Label {
                 id: hint
+                objectName: "routingHint"
+                Layout.fillWidth: true
                 color: t.text
                 font.pixelSize: t.fs(11)
                 elide: Text.ElideRight
-                Layout.maximumWidth: page.width * 0.45
             }
         }
     }
